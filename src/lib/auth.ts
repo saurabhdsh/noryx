@@ -1,4 +1,5 @@
 import { getCompanyEmailError } from "./companyEmail";
+import { notifyTrialRegistration } from "./trialNotify";
 
 export type PlanId = "starter" | "growth" | "business" | "enterprise";
 
@@ -52,20 +53,29 @@ function toPublicUser(user: StoredUser): User {
   return publicUser;
 }
 
+function validateTrialInput(input: SignUpInput, users: StoredUser[]): string {
+  const normalizedEmail = input.email.trim().toLowerCase();
+
+  if (users.some((u) => u.email === normalizedEmail)) {
+    return "A trial request with this email already exists.";
+  }
+
+  const emailError = getCompanyEmailError(normalizedEmail);
+  if (emailError) return emailError;
+
+  if (!input.name.trim()) {
+    return "Name is required.";
+  }
+
+  return "";
+}
+
 function registerTrialUser(input: SignUpInput): StoredUser {
   const users = readUsers();
   const normalizedEmail = input.email.trim().toLowerCase();
 
-  if (users.some((u) => u.email === normalizedEmail)) {
-    throw new Error("A trial request with this email already exists.");
-  }
-
-  const emailError = getCompanyEmailError(normalizedEmail);
-  if (emailError) throw new Error(emailError);
-
-  if (!input.name.trim()) {
-    throw new Error("Name is required.");
-  }
+  const validationError = validateTrialInput(input, users);
+  if (validationError) throw new Error(validationError);
 
   const user: StoredUser = {
     id: crypto.randomUUID(),
@@ -82,8 +92,19 @@ function registerTrialUser(input: SignUpInput): StoredUser {
   return user;
 }
 
-/** Saves a trial request without signing the user in (queue flow). */
+/** Saves a trial request, emails reach@noryxtest.io, and does not sign the user in. */
 export async function submitTrialRequest(input: SignUpInput): Promise<User> {
+  const users = readUsers();
+  const validationError = validateTrialInput(input, users);
+  if (validationError) throw new Error(validationError);
+
+  const normalizedEmail = input.email.trim().toLowerCase();
+  await notifyTrialRegistration({
+    name: input.name.trim(),
+    email: normalizedEmail,
+    plan: input.plan,
+    planLabel: PLAN_LABELS[input.plan],
+  });
   return toPublicUser(registerTrialUser(input));
 }
 
