@@ -49,7 +49,8 @@ export function DashboardPage() {
           Welcome, {user.name.split(" ")[0]}
         </h1>
         <p className="mt-2 text-white/55">
-          {PLAN_LABELS[user.plan]} · {user.company}
+          {PLAN_LABELS[user.plan]}
+          {user.company ? ` · ${user.company}` : ""}
         </p>
 
         <div className="mt-8 grid gap-6 md:grid-cols-3">

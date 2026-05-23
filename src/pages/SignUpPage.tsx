@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import { AuthShell } from "../components/auth/AuthShell";
 import { SignUpForm } from "../components/auth/SignUpForm";
@@ -7,15 +8,17 @@ import { usePageTitle } from "../hooks/usePageTitle";
 export function SignUpPage() {
   usePageTitle("Start free trial");
   const { user, loading } = useAuth();
+  const [queued, setQueued] = useState(false);
 
   if (!loading && user) return <Navigate to="/app" replace />;
 
   return (
     <AuthShell
-      title="Start your 14-day trial"
-      subtitle="Connect your first agent in under 5 minutes. No credit card required."
+      hideHeader={queued}
+      title="Request your 14-day trial"
+      subtitle="Company email and plan only — no password or company profile. We’ll follow up to activate your trial."
     >
-      <SignUpForm />
+      <SignUpForm onQueued={() => setQueued(true)} />
     </AuthShell>
   );
 }

@@ -1,36 +1,40 @@
 import { useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { Check, ChevronLeft, ChevronRight } from "lucide-react";
-import { useAuth } from "../../context/AuthContext";
 import {
   PLAN_LABELS,
+  submitTrialRequest,
   type PlanId,
   type SignUpInput,
 } from "../../lib/auth";
+import { getCompanyEmailError } from "../../lib/companyEmail";
 import { FormField, inputClass } from "./FormField";
+import { TrialQueueSuccess } from "./TrialQueueSuccess";
 
-const STEPS = ["Account", "Company", "Plan"] as const;
+const STEPS = ["Your details", "Plan"] as const;
 const PLANS: PlanId[] = ["starter", "growth", "business", "enterprise"];
 
-const TEAM_SIZES = ["1–10", "11–50", "51–200", "200+"] as const;
+type Props = {
+  onQueued?: () => void;
+};
 
-export function SignUpForm() {
+export function SignUpForm({ onQueued }: Props) {
   const [searchParams] = useSearchParams();
   const initialPlan = (searchParams.get("plan") as PlanId) || "growth";
-  const navigate = useNavigate();
-  const { signUp } = useAuth();
 
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [queued, setQueued] = useState<{
+    name: string;
+    email: string;
+    plan: PlanId;
+  } | null>(null);
 
   const [form, setForm] = useState<SignUpInput>({
     email: "",
-    password: "",
     name: "",
-    company: "",
-    teamSize: "1–10",
     plan: PLANS.includes(initialPlan) ? initialPlan : "growth",
   });
 
@@ -44,12 +48,8 @@ export function SignUpForm() {
     const errs: Record<string, string> = {};
     if (step === 0) {
       if (!form.name.trim()) errs.name = "Name is required";
-      if (!form.email.trim()) errs.email = "Email is required";
-      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = "Enter a valid email";
-      if (form.password.length < 8) errs.password = "At least 8 characters";
-    }
-    if (step === 1) {
-      if (!form.company.trim()) errs.company = "Company name is required";
+      const emailErr = getCompanyEmailError(form.email);
+      if (emailErr) errs.email = emailErr;
     }
     setFieldErrors(errs);
     return Object.keys(errs).length === 0;
@@ -66,14 +66,26 @@ export function SignUpForm() {
     setLoading(true);
     setError(null);
     try {
-      await signUp(form);
-      navigate("/app", { replace: true });
+      await submitTrialRequest(form);
+      const snapshot = {
+        name: form.name.trim(),
+        email: form.email.trim().toLowerCase(),
+        plan: form.plan,
+      };
+      setQueued(snapshot);
+      onQueued?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Sign up failed");
     } finally {
       setLoading(false);
     }
   };
+
+  if (queued) {
+    return (
+      <TrialQueueSuccess name={queued.name} email={queued.email} plan={queued.plan} />
+    );
+  }
 
   return (
     <div>
@@ -98,7 +110,10 @@ export function SignUpForm() {
       </ol>
 
       {error && (
-        <div className="mb-4 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300" role="alert">
+        <div
+          className="mb-4 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300"
+          role="alert"
+        >
           {error}
         </div>
       )}
@@ -116,66 +131,27 @@ export function SignUpForm() {
               aria-describedby={fieldErrors.name ? "name-error" : undefined}
             />
           </FormField>
-          <FormField id="email" label="Work email" error={fieldErrors.email}>
+          <FormField
+            id="email"
+            label="Company email"
+            error={fieldErrors.email}
+            hint="Work email only — Gmail, Outlook.com, Yahoo, and similar aren’t accepted."
+          >
             <input
               id="email"
               type="email"
               className={inputClass}
               value={form.email}
               onChange={(e) => update({ email: e.target.value })}
-              autoComplete="email"
+              autoComplete="work-email"
+              placeholder="you@yourcompany.com"
               aria-invalid={!!fieldErrors.email}
-            />
-          </FormField>
-          <FormField
-            id="password"
-            label="Password"
-            error={fieldErrors.password}
-            hint="Minimum 8 characters"
-          >
-            <input
-              id="password"
-              type="password"
-              className={inputClass}
-              value={form.password}
-              onChange={(e) => update({ password: e.target.value })}
-              autoComplete="new-password"
-              aria-invalid={!!fieldErrors.password}
             />
           </FormField>
         </div>
       )}
 
       {step === 1 && (
-        <div className="space-y-4">
-          <FormField id="company" label="Company" error={fieldErrors.company}>
-            <input
-              id="company"
-              className={inputClass}
-              value={form.company}
-              onChange={(e) => update({ company: e.target.value })}
-              autoComplete="organization"
-              aria-invalid={!!fieldErrors.company}
-            />
-          </FormField>
-          <FormField id="teamSize" label="Team size">
-            <select
-              id="teamSize"
-              className={inputClass}
-              value={form.teamSize}
-              onChange={(e) => update({ teamSize: e.target.value })}
-            >
-              {TEAM_SIZES.map((s) => (
-                <option key={s} value={s} className="bg-[#1e1b4b]">
-                  {s} people
-                </option>
-              ))}
-            </select>
-          </FormField>
-        </div>
-      )}
-
-      {step === 2 && (
         <fieldset className="space-y-3">
           <legend className="sr-only">Choose a plan</legend>
           {PLANS.map((plan) => (
@@ -234,11 +210,10 @@ export function SignUpForm() {
             disabled={loading}
             className="inline-flex flex-1 items-center justify-center rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 py-3 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-60"
           >
-            {loading ? "Creating account…" : "Start free trial"}
+            {loading ? "Submitting…" : "Submit trial request"}
           </button>
         )}
       </div>
-
     </div>
   );
 }

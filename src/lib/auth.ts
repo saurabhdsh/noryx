@@ -1,3 +1,5 @@
+import { getCompanyEmailError } from "./companyEmail";
+
 export type PlanId = "starter" | "growth" | "business" | "enterprise";
 
 export type User = {
@@ -12,17 +14,16 @@ export type User = {
 
 export type SignUpInput = {
   email: string;
-  password: string;
   name: string;
-  company: string;
-  teamSize: string;
+  company?: string;
+  teamSize?: string;
   plan: PlanId;
 };
 
 const USERS_KEY = "noryx_users";
 const SESSION_KEY = "noryx_session";
 
-type StoredUser = User & { passwordHash: string };
+type StoredUser = User & { passwordHash?: string };
 
 function readUsers(): StoredUser[] {
   try {
@@ -46,35 +47,48 @@ async function hashPassword(password: string): Promise<string> {
     .join("");
 }
 
-function toPublicUser({ passwordHash: _, ...user }: StoredUser): User {
-  return user;
+function toPublicUser(user: StoredUser): User {
+  const { passwordHash: _, ...publicUser } = user;
+  return publicUser;
 }
 
-export async function signUp(input: SignUpInput): Promise<User> {
+function registerTrialUser(input: SignUpInput): StoredUser {
   const users = readUsers();
   const normalizedEmail = input.email.trim().toLowerCase();
 
   if (users.some((u) => u.email === normalizedEmail)) {
-    throw new Error("An account with this email already exists.");
+    throw new Error("A trial request with this email already exists.");
   }
 
-  if (input.password.length < 8) {
-    throw new Error("Password must be at least 8 characters.");
+  const emailError = getCompanyEmailError(normalizedEmail);
+  if (emailError) throw new Error(emailError);
+
+  if (!input.name.trim()) {
+    throw new Error("Name is required.");
   }
 
   const user: StoredUser = {
     id: crypto.randomUUID(),
     email: normalizedEmail,
     name: input.name.trim(),
-    company: input.company.trim(),
-    teamSize: input.teamSize,
+    company: input.company?.trim() ?? "",
+    teamSize: input.teamSize ?? "1–10",
     plan: input.plan,
     createdAt: new Date().toISOString(),
-    passwordHash: await hashPassword(input.password),
   };
 
   users.push(user);
   writeUsers(users);
+  return user;
+}
+
+/** Saves a trial request without signing the user in (queue flow). */
+export async function submitTrialRequest(input: SignUpInput): Promise<User> {
+  return toPublicUser(registerTrialUser(input));
+}
+
+export async function signUp(input: SignUpInput): Promise<User> {
+  const user = registerTrialUser(input);
   setSession(user.id);
   return toPublicUser(user);
 }
@@ -86,6 +100,10 @@ export async function signIn(email: string, password: string): Promise<User> {
 
   if (!match) {
     throw new Error("No account found with this email.");
+  }
+
+  if (!match.passwordHash) {
+    throw new Error("This trial account has no password. Use Start free trial to register.");
   }
 
   const hash = await hashPassword(password);
