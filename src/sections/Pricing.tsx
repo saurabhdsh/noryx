@@ -67,13 +67,6 @@ export function Pricing() {
                       }
                 }
               >
-                <div
-                  className={`absolute inset-x-0 top-0 h-1 rounded-t-3xl bg-gradient-to-r ${
-                    plan.popular
-                      ? "from-violet-500 via-fuchsia-500 to-cyan-400"
-                      : "from-white/20 to-white/5"
-                  }`}
-                />
                 {plan.popular && (
                   <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500 px-3 py-1 text-xs font-semibold">
                     Most popular
