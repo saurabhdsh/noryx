@@ -75,7 +75,12 @@ export function SignUpForm({ onQueued }: Props) {
       setQueued(snapshot);
       onQueued?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Sign up failed");
+      const msg = e instanceof Error ? e.message : "Sign up failed";
+      setError(
+        msg === "Load failed" || msg === "Failed to fetch"
+          ? "Network error — check your connection, try disabling ad blockers, or email reach@noryxtest.io."
+          : msg,
+      );
     } finally {
       setLoading(false);
     }

@@ -1,4 +1,15 @@
-const FORM_ID = import.meta.env.VITE_FORMSPREE_FORM_ID?.trim();
+/** Form ID only, or full URL — we normalize either format from the env var. */
+function getFormspreeFormId(): string {
+  const raw = import.meta.env.VITE_FORMSPREE_FORM_ID?.trim() ?? "";
+  if (!raw) return "";
+
+  const fromUrl = raw.match(/formspree\.io\/f\/([a-zA-Z0-9]+)/i);
+  if (fromUrl) return fromUrl[1];
+
+  return raw;
+}
+
+const FORM_ID = getFormspreeFormId();
 
 export type TrialNotifyPayload = {
   name: string;
@@ -24,30 +35,39 @@ export async function notifyTrialRegistration(payload: TrialNotifyPayload): Prom
   }
 
   const { name, email, plan, planLabel } = payload;
+  const endpoint = `https://formspree.io/f/${FORM_ID}`;
 
-  const res = await fetch(`https://formspree.io/f/${FORM_ID}`, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      name,
-      email,
-      plan,
-      plan_label: planLabel,
-      submitted_at: new Date().toISOString(),
-      _replyto: email,
-      _subject: `New noryx trial request — ${planLabel}`,
-      message: [
-        "New trial request from noryxtest.io",
-        "",
-        `Name: ${name}`,
-        `Company email: ${email}`,
-        `Plan: ${planLabel}`,
-      ].join("\n"),
-    }),
-  });
+  const body = new FormData();
+  body.append("name", name);
+  body.append("email", email);
+  body.append("plan", plan);
+  body.append("plan_label", planLabel);
+  body.append("submitted_at", new Date().toISOString());
+  body.append("_replyto", email);
+  body.append("_subject", `New noryx trial request — ${planLabel}`);
+  body.append(
+    "message",
+    [
+      "New trial request from noryxtest.io",
+      "",
+      `Name: ${name}`,
+      `Company email: ${email}`,
+      `Plan: ${planLabel}`,
+    ].join("\n"),
+  );
+
+  let res: Response;
+  try {
+    res = await fetch(endpoint, {
+      method: "POST",
+      headers: { Accept: "application/json" },
+      body,
+    });
+  } catch {
+    throw new Error(
+      "Could not reach our signup service. Check your connection, disable ad blockers for this site, or email reach@noryxtest.io.",
+    );
+  }
 
   if (!res.ok) {
     let detail = "Could not submit your request. Please try again.";
